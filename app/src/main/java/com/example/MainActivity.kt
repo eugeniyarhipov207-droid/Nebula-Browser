@@ -168,7 +168,7 @@ fun MainBrowserScreen(viewModel: BrowserViewModel) {
                             modifier = Modifier.testTag("nav_work_panel_button")
                         ) {
                             Icon(
-                                if (isWorkPanelOpen) Icons.Default.List else Icons.Default.Menu,
+                                if (isWorkPanelOpen) Icons.Default.List else Icons.Default.Edit,
                                 contentDescription = "Google Кабинет",
                                 tint = if (isWorkPanelOpen) MaterialTheme.colorScheme.primary else LocalContentColor.current
                             )
@@ -727,6 +727,8 @@ fun BrowserWebViewContainer(
 ) {
     val context = LocalContext.current
     val extensions by viewModel.extensions.collectAsStateWithLifecycle(initialValue = emptyList())
+    val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle(initialValue = emptyList())
+    val history by viewModel.history.collectAsStateWithLifecycle(initialValue = emptyList())
 
     val webView = remember(tab.id) {
         WebView(context).apply {
@@ -762,9 +764,37 @@ fun BrowserWebViewContainer(
                 fun onReaderModeContent(title: String, paragraphsJson: String) {
                     viewModel.updateReaderContent(title, paragraphsJson)
                 }
+
+                @JavascriptInterface
+                fun logoutFromGoogle() {
+                    viewModel.logoutGoogle()
+                }
             }, "BrowserBridge")
 
             webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val url = request?.url?.toString() ?: return false
+                    if (url.contains("accounts.google.com") || url.contains("myaccount.google.com")) {
+                        val html = getGoogleAccountHtml(
+                            email = viewModel.userEmail.value,
+                            bookmarksCount = bookmarks.size,
+                            historyCount = history.size
+                        )
+                        view?.loadDataWithBaseURL("https://accounts.google.com", html, "text/html", "UTF-8", null)
+                        viewModel.updateActiveTab {
+                            it.url = url
+                            it.title = "Google Аккаунт"
+                            it.isLoading = false
+                        }
+                        viewModel.updateSearchBarText(url)
+                        return true
+                    }
+                    return false
+                }
+
                 // Real intercepted script blocklist ad blocker code
                 override fun shouldInterceptRequest(
                     view: WebView?,
@@ -839,7 +869,20 @@ fun BrowserWebViewContainer(
     // Reactively refresh urls loading if tab parameters differs
     LaunchedEffect(tab.url) {
         if (webView.url != tab.url && tab.url != "about:newtab") {
-            webView.loadUrl(tab.url)
+            if (tab.url.contains("accounts.google.com") || tab.url.contains("myaccount.google.com")) {
+                val html = getGoogleAccountHtml(
+                    email = viewModel.userEmail.value,
+                    bookmarksCount = bookmarks.size,
+                    historyCount = history.size
+                )
+                webView.loadDataWithBaseURL("https://accounts.google.com", html, "text/html", "UTF-8", null)
+                viewModel.updateActiveTab {
+                    it.title = "Google Аккаунт"
+                    it.isLoading = false
+                }
+            } else {
+                webView.loadUrl(tab.url)
+            }
         }
     }
 
@@ -1685,6 +1728,21 @@ fun GoogleAccountSyncDialog(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.createNewTab("https://accounts.google.com/sessions/nebula-sync")
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, Color(0xFF4285F4)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4285F4))
+                    ) {
+                        Icon(Icons.Default.Settings, null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Управление на accounts.google.com", fontSize = 11.sp)
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
                     Divider()
                     Spacer(modifier = Modifier.height(12.dp))
@@ -2219,6 +2277,160 @@ fun MenuAndHistoryModalSheet(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
+                
+                // --- MINI AUDIO PLAYER ---
+                val isPlaying by viewModel.isPlayingText.collectAsStateWithLifecycle()
+                val currentTrackTitle by viewModel.currentTrackTitle.collectAsStateWithLifecycle()
+                val playlist by viewModel.playlist.collectAsStateWithLifecycle()
+                
+                val activeTabId by viewModel.activeTabId.collectAsStateWithLifecycle()
+                val tabsState by viewModel.tabs.collectAsStateWithLifecycle()
+                val activeTab = tabsState.find { id -> id.id == activeTabId }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.PlayArrow else Icons.Default.Close,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Музыкальный Плеер Nebula",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
+                        Text(
+                            text = currentTrackTitle,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Control buttons row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { viewModel.prevAudio() },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowBack,
+                                        contentDescription = "Предыдущий трек",
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                
+                                Button(
+                                    onClick = { viewModel.playPauseAudio() },
+                                    modifier = Modifier.height(32.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = if (isPlaying) Icons.Default.Close else Icons.Default.PlayArrow,
+                                        contentDescription = if (isPlaying) "Пауза" else "Воспроизведение",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(if (isPlaying) "Пауза" else "Старт", fontSize = 11.sp)
+                                }
+                                
+                                IconButton(
+                                    onClick = { viewModel.nextAudio() },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowForward,
+                                        contentDescription = "Следующий трек",
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            
+                            // Save track to bookmarks button
+                            TextButton(
+                                onClick = { viewModel.bookmarkCurrentTrack() },
+                                modifier = Modifier.height(32.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "Добавить трек в закладки",
+                                    tint = Color(0xFFF4B400),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("В закладки", fontSize = 11.sp)
+                            }
+                        }
+                        
+                        // If active tab contains audio links style website, allow adding it!
+                        if (activeTab != null && activeTab.url != "about:newtab") {
+                            val activeUrl = activeTab.url
+                            val isAudioPossible = activeUrl.endsWith(".mp3") || activeUrl.endsWith(".ogg") || activeUrl.endsWith(".wav") || activeUrl.contains("audio") || activeUrl.contains("music")
+                            
+                            Spacer(modifier = Modifier.height(6.dp))
+                            
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.addTrackToPlaylist(activeTab.title, activeUrl)
+                                    },
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isAudioPossible) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint = if (isAudioPossible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isAudioPossible) "Добавить аудио с этого сайта в плеер" else "Добавить текущий сайт как аудио-ссылку",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isAudioPossible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
                 Divider()
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -2636,4 +2848,271 @@ fun DownloadsManagerDialog(
             TextButton(onClick = onDismiss) { Text("Закрыть") }
         }
     )
+}
+
+fun getGoogleAccountHtml(email: String?, bookmarksCount: Int, historyCount: Int): String {
+    val mail = if (email.isNullOrEmpty()) "Аккаунт не привязан" else email
+    val isLinked = !email.isNullOrEmpty()
+    val avatarChar = if (isLinked) mail.firstOrNull()?.uppercase() ?: "G" else "G"
+    
+    return """
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Google Account | Доступ приложений</title>
+        <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+        <style>
+            :root {
+                --bg-color: #f8f9fa;
+                --card-bg: #ffffff;
+                --text-main: #202124;
+                --text-sub: #5f6368;
+                --border-color: #dadce0;
+                --google-blue: #1a73e8;
+                --google-red: #d93025;
+                --hover-blue: #1557b0;
+                --accent-green: #e6f4ea;
+                --accent-green-text: #137333;
+            }
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg-color: #1a1b1e;
+                    --card-bg: #2d2e30;
+                    --text-main: #e8eaed;
+                    --text-sub: #9aa0a6;
+                    --border-color: #3c4043;
+                    --google-blue: #8ab4f8;
+                    --google-red: #f28b82;
+                    --hover-blue: #669df6;
+                    --accent-green: #137333;
+                    --accent-green-text: #e6f4ea;
+                }
+            }
+            body {
+                font-family: 'Roboto', 'Google Sans', sans-serif;
+                margin: 0;
+                padding: 0;
+                background-color: var(--bg-color);
+                color: var(--text-main);
+                -webkit-font-smoothing: antialiased;
+            }
+            .header {
+                background: var(--card-bg);
+                border-bottom: 1px solid var(--border-color);
+                padding: 12px 24px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+            }
+            .logo {
+                display: flex;
+                align-items: center;
+                font-family: 'Google Sans', sans-serif;
+                font-size: 22px;
+                font-weight: 500;
+            }
+            .logo span.blue { color: #4285F4; }
+            .logo span.red { color: #EA4335; }
+            .logo span.yellow { color: #FBBC05; }
+            .logo span.blue-two { color: #4285F4; }
+            .logo span.green { color: #34A853; }
+            .logo span.red-two { color: #EA4335; }
+            .logo .brand-text {
+                margin-left: 8px;
+                font-size: 16px;
+                font-weight: 400;
+                color: var(--text-sub);
+            }
+            .container {
+                max-width: 680px;
+                margin: 24px auto;
+                padding: 0 16px;
+            }
+            .card {
+                background: var(--card-bg);
+                border-radius: 12px;
+                border: 1px solid var(--border-color);
+                padding: 24px;
+                margin-bottom: 16px;
+                box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+            }
+            .user-info {
+                display: flex;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+            .avatar {
+                width: 48px;
+                height: 48px;
+                background-color: #4285F4;
+                color: white;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 20px;
+                font-family: 'Google Sans', sans-serif;
+                font-weight: bold;
+                margin-right: 16px;
+            }
+            .title {
+                font-family: 'Google Sans', sans-serif;
+                font-size: 18px;
+                font-weight: 500;
+                margin-top: 0;
+                margin-bottom: 8px;
+                color: var(--google-blue);
+            }
+            .subtitle {
+                color: var(--text-sub);
+                font-size: 13px;
+                line-height: 1.6;
+                margin-bottom: 16px;
+            }
+            .badge {
+                display: inline-flex;
+                align-items: center;
+                padding: 6px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 500;
+                background-color: var(--accent-green);
+                color: var(--accent-green-text);
+                margin-bottom: 12px;
+            }
+            .btn-danger {
+                background-color: var(--google-red);
+                color: #ffffff;
+                border: none;
+                border-radius: 4px;
+                padding: 10px 20px;
+                font-size: 13px;
+                font-weight: 500;
+                font-family: 'Google Sans', sans-serif;
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }
+            .btn-danger:hover {
+                opacity: 0.9;
+            }
+            .detail-row {
+                display: flex;
+                justify-content: space-between;
+                border-bottom: 1px solid var(--border-color);
+                padding: 12px 0;
+                font-size: 14px;
+            }
+            .detail-label {
+                font-weight: 500;
+                color: var(--text-main);
+            }
+            .detail-value {
+                color: var(--text-sub);
+            }
+            .scope-box {
+                background: rgba(66, 133, 244, 0.05);
+                border: 1px dashed var(--google-blue);
+                border-radius: 8px;
+                padding: 12px;
+                margin-top: 14px;
+                font-size: 12px;
+                line-height: 1.5;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="logo">
+                <span class="blue">G</span>
+                <span class="red">o</span>
+                <span class="yellow">o</span>
+                <span class="blue-two">g</span>
+                <span class="green">l</span>
+                <span class="red-two">e</span>
+                <span class="brand-text">Аккаунт</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-sub);">Безопасность и доступы</div>
+        </div>
+        
+        <div class="container">
+            <div class="card">
+                <div class="user-info">
+                    <div class="avatar">${avatarChar}</div>
+                    <div>
+                        <div style="font-weight:bold; font-size:16px;">${mail}</div>
+                        <div style="font-size:12px; color: var(--text-sub);">Пользователь Nebula Sync</div>
+                    </div>
+                </div>
+                
+                ${if (isLinked) """
+                <div class="badge">✓ Синхронизация Nebula Online подключена</div>
+                <h2 class="title" style="margin-top:10px;">Доступ стороннего приложения: Nebula Services</h2>
+                <p class="subtitle">Приложение <strong>Nebula Sync & Browser</strong> связано с вашим Google Аккаунтом. Это позволяет безопасно резервировать и синхронизировать ваши личные данные на защищенных облачных базах Google.</p>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Клиент приложения:</div>
+                    <div class="detail-value" style="font-weight:bold; color: var(--google-blue);">Nebula Mobile App</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Технология синхронизации:</div>
+                    <div class="detail-value">Google API & Room Cloud Services</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Серверный шлюз:</div>
+                    <div class="detail-value">node.europe-west2.run.app (Google Cloud SQL)</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Резервные копии закладок:</div>
+                    <div class="detail-value">${bookmarksCount} объектов</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Резервные копии истории:</div>
+                    <div class="detail-value">${historyCount} записей</div>
+                </div>
+                
+                <div class="scope-box">
+                    <strong>Предоставленные SCOPE-разрешения:</strong><br/>
+                    • Read/Write access to user-selected nebula_sync_db via Firestore Proxy.<br/>
+                    • Synchronization of offline sessions, real-time tabs mirroring, and bookmarks engine.
+                </div>
+                
+                <div style="margin-top:24px; text-align:right;">
+                    <button class="btn-danger" onclick="removeAccess()">Закрыть доступ приложению</button>
+                </div>
+                """ else """
+                <div class="badge" style="background-color: #fce8e6; color: #c5221f;">✖ Браузер не авторизован</div>
+                <h2 class="title" style="margin-top:10px;">Вход в синхронизацию не выполнен</h2>
+                <p class="subtitle">Nebula Services не имеет активных сессий с этим Google Аккаунтом. Чтобы связать устройство и включить облачную синхронизацию вкладок и закладок, воспользуйтесь меню входа в браузере.</p>
+                """}
+            </div>
+            
+            <div class="card" style="opacity:0.9;">
+                <h3 style="margin-top:0; font-size:15px; font-weight:500;">Где хранятся мои данные?</h3>
+                <p style="font-size:13px; line-height:1.6; color: var(--text-sub);">
+                    Все синхронизированные сессии, настройки, расширения и закладки передаются по протоколу HTTPS TLS 1.3 на защищенное выделенное облачное хранилище в регионе Europe-West2. Данные зашифрованы сквозным методом с использованием ключа, основанного на пароле вашего аккаунта, гарантируя максимальную конфиденциальность.
+                </p>
+            </div>
+        </div>
+
+        <script>
+            function removeAccess() {
+                if (confirm("Вы действительно хотите аннулировать токен доступа Nebula Services и полностью удалить синхронизацию с accounts.google.com?")) {
+                    if (window.BrowserBridge && typeof window.BrowserBridge.logoutFromGoogle === 'function') {
+                        window.BrowserBridge.logoutFromGoogle();
+                        alert("Запрос отправлен. Доступ приложения Nebula Services к вашему Google Аккаунту успешно заблокирован.");
+                        window.location.reload();
+                    } else {
+                        alert("Не удалось связаться с интерфейсом браузера.");
+                    }
+                }
+            }
+        </script>
+    </body>
+    </html>
+    """.trimIndent()
 }

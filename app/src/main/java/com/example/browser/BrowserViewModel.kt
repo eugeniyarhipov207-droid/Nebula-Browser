@@ -729,4 +729,141 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             repository.clearDownloads()
         }
     }
+
+    // --- Audio Player Features ---
+    private var mediaPlayer: android.media.MediaPlayer? = null
+
+    private val _playlist = MutableStateFlow<List<AudioTrack>>(listOf(
+        AudioTrack("Nebula Cosmic Lofi", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"),
+        AudioTrack("Deep Ambient Space", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"),
+        AudioTrack("Retro Synth Wave", "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3")
+    ))
+    val playlist: StateFlow<List<AudioTrack>> = _playlist.asStateFlow()
+
+    private val _currentTrackIndex = MutableStateFlow(0)
+    val currentTrackIndex: StateFlow<Int> = _currentTrackIndex.asStateFlow()
+
+    private val _isPlayingText = MutableStateFlow(false)
+    val isPlayingText: StateFlow<Boolean> = _isPlayingText.asStateFlow()
+
+    private val _currentTrackTitle = MutableStateFlow("Nebula Cosmic Lofi")
+    val currentTrackTitle: StateFlow<String> = _currentTrackTitle.asStateFlow()
+
+    fun addTrackToPlaylist(title: String, url: String) {
+        val currentList = _playlist.value.toMutableList()
+        if (currentList.none { it.url == url }) {
+            currentList.add(AudioTrack(title, url))
+            _playlist.value = currentList
+        }
+    }
+
+    fun playPauseAudio() {
+        val list = _playlist.value
+        if (list.isEmpty()) return
+        val index = _currentTrackIndex.value
+        val track = list.getOrNull(index) ?: return
+
+        try {
+            if (mediaPlayer == null) {
+                mediaPlayer = android.media.MediaPlayer().apply {
+                    setDataSource(track.url)
+                    prepareAsync()
+                    setOnPreparedListener {
+                        start()
+                        _isPlayingText.value = true
+                        _currentTrackTitle.value = track.title
+                    }
+                    setOnCompletionListener {
+                        nextAudio()
+                    }
+                    setOnErrorListener { _, _, _ ->
+                        _isPlayingText.value = false
+                        true
+                    }
+                }
+            } else {
+                if (mediaPlayer?.isPlaying == true) {
+                    mediaPlayer?.pause()
+                    _isPlayingText.value = false
+                } else {
+                    mediaPlayer?.start()
+                    _isPlayingText.value = true
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun playTrack(index: Int) {
+        val list = _playlist.value
+        if (list.isEmpty()) return
+        val safeIndex = (index + list.size) % list.size
+        _currentTrackIndex.value = safeIndex
+        val track = list[safeIndex]
+
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
+
+            mediaPlayer = android.media.MediaPlayer().apply {
+                setDataSource(track.url)
+                prepareAsync()
+                setOnPreparedListener {
+                    start()
+                    _isPlayingText.value = true
+                    _currentTrackTitle.value = track.title
+                }
+                setOnCompletionListener {
+                    nextAudio()
+                }
+                setOnErrorListener { _, _, _ ->
+                    _isPlayingText.value = false
+                    true
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun nextAudio() {
+        val list = _playlist.value
+        if (list.isEmpty()) return
+        val nextIdx = (_currentTrackIndex.value + 1) % list.size
+        playTrack(nextIdx)
+    }
+
+    fun prevAudio() {
+        val list = _playlist.value
+        if (list.isEmpty()) return
+        val prevIdx = (_currentTrackIndex.value - 1 + list.size) % list.size
+        playTrack(prevIdx)
+    }
+
+    fun bookmarkCurrentTrack() {
+        val list = _playlist.value
+        val index = _currentTrackIndex.value
+        val track = list.getOrNull(index) ?: return
+        viewModelScope.launch {
+            if (!repository.isBookmarked(track.url)) {
+                repository.insertBookmark(BookmarkEntity(url = track.url, title = "Музыка: ${track.title}"))
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }
+
+data class AudioTrack(val title: String, val url: String)
+
