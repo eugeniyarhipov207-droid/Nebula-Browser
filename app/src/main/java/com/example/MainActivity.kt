@@ -772,29 +772,6 @@ fun BrowserWebViewContainer(
             }, "BrowserBridge")
 
             webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(
-                    view: WebView?,
-                    request: WebResourceRequest?
-                ): Boolean {
-                    val url = request?.url?.toString() ?: return false
-                    if (url.contains("accounts.google.com") || url.contains("myaccount.google.com")) {
-                        val html = getGoogleAccountHtml(
-                            email = viewModel.userEmail.value,
-                            bookmarksCount = bookmarks.size,
-                            historyCount = history.size
-                        )
-                        view?.loadDataWithBaseURL("https://accounts.google.com", html, "text/html", "UTF-8", null)
-                        viewModel.updateActiveTab {
-                            it.url = url
-                            it.title = "Google Аккаунт"
-                            it.isLoading = false
-                        }
-                        viewModel.updateSearchBarText(url)
-                        return true
-                    }
-                    return false
-                }
-
                 // Real intercepted script blocklist ad blocker code
                 override fun shouldInterceptRequest(
                     view: WebView?,
@@ -869,20 +846,7 @@ fun BrowserWebViewContainer(
     // Reactively refresh urls loading if tab parameters differs
     LaunchedEffect(tab.url) {
         if (webView.url != tab.url && tab.url != "about:newtab") {
-            if (tab.url.contains("accounts.google.com") || tab.url.contains("myaccount.google.com")) {
-                val html = getGoogleAccountHtml(
-                    email = viewModel.userEmail.value,
-                    bookmarksCount = bookmarks.size,
-                    historyCount = history.size
-                )
-                webView.loadDataWithBaseURL("https://accounts.google.com", html, "text/html", "UTF-8", null)
-                viewModel.updateActiveTab {
-                    it.title = "Google Аккаунт"
-                    it.isLoading = false
-                }
-            } else {
-                webView.loadUrl(tab.url)
-            }
+            webView.loadUrl(tab.url)
         }
     }
 
