@@ -1411,7 +1411,7 @@ fun GoogleAccountSyncDialog(
 
     // 1: Choose Account, 2: Manual Email, 3: Manual Password, 4: Consent, 5: Connecting safely (Loader)
     var authStep by remember { mutableStateOf(1) }
-    var selectedEmail by remember { mutableStateOf("eugeniy.arhipov207@gmail.com") }
+    var selectedEmail by remember { mutableStateOf("user@gmail.com") }
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var emailError by remember { mutableStateOf<String?>(null) }
@@ -1489,12 +1489,12 @@ fun GoogleAccountSyncDialog(
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
                             )
 
-                            // Account 1: eugeniy.arhipov207@gmail.com (v0ldex)
+                            // Account 1: user mock
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        selectedEmail = "eugeniy.arhipov207@gmail.com"
+                                        selectedEmail = "user@gmail.com"
                                         authStep = 4 // Direct to Consent
                                     },
                                 shape = RoundedCornerShape(8.dp),
@@ -1512,12 +1512,12 @@ fun GoogleAccountSyncDialog(
                                             .background(Color(0xFF4285F4)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text("V", color = Color.White, fontWeight = FontWeight.Bold)
+                                        Text("U", color = Color.White, fontWeight = FontWeight.Bold)
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(text = "v0ldex", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                        Text(text = "eugeniy.arhipov207@gmail.com", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(text = "User", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(text = "user@gmail.com", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
@@ -1754,7 +1754,7 @@ fun GoogleAccountSyncDialog(
                                             .background(Color(0xFF4285F4)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text("V", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text("U", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
@@ -1799,7 +1799,7 @@ fun GoogleAccountSyncDialog(
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
-                                    Text("v0ldex", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("User", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     Text("Name and profile picture", fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
                                 }
                             }
@@ -3241,12 +3241,12 @@ fun getGoogleAccountHtml(email: String?, bookmarksCount: Int, historyCount: Int)
                     <div class="avatar">${avatarChar}</div>
                     <div>
                         <div style="font-weight:bold; font-size:16px;">${mail}</div>
-                        <div style="font-size:12px; color: var(--text-sub);">Пользователь Nebula Sync</div>
+                        <div style="font-size:12px; color: var(--text-sub);">Пользователь браузера</div>
                     </div>
                 </div>
                 
                 ${if (isLinked) """
-                <div class="badge">✓ Синхронизация Nebula Online подключена</div>
+                <div class="badge">✓ Синхронизация Google Cloud подключена</div>
                 <h2 class="title" style="margin-top:10px;">Доступ стороннего приложения: Nebula Services</h2>
                 <p class="subtitle">Приложение <strong>Nebula Sync & Browser</strong> связано с вашим Google Аккаунтом. Это позволяет безопасно резервировать и синхронизировать ваши личные данные на защищенных облачных базах Google.</p>
                 
