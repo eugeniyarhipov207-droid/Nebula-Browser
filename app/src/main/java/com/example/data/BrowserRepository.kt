@@ -9,6 +9,14 @@ class BrowserRepository(private val db: BrowserDatabase) {
     private val historyDao = db.historyDao()
     private val extensionDao = db.extensionDao()
     private val tabDao = db.tabDao()
+    private val downloadDao = db.downloadDao()
+
+    // --- Downloads ---
+    val downloads: Flow<List<DownloadEntity>> = downloadDao.getAllDownloads()
+    suspend fun insertDownload(download: DownloadEntity): Long = downloadDao.insertDownload(download)
+    suspend fun updateDownload(download: DownloadEntity) = downloadDao.updateDownload(download)
+    suspend fun deleteDownload(download: DownloadEntity) = downloadDao.deleteDownload(download)
+    suspend fun clearDownloads() = downloadDao.clearAll()
 
     // --- Bookmarks ---
     val bookmarks: Flow<List<BookmarkEntity>> = bookmarkDao.getAllBookmarks()

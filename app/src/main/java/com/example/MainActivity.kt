@@ -93,6 +93,7 @@ fun MainBrowserScreen(viewModel: BrowserViewModel) {
     var isBookmarksSheetOpen by remember { mutableStateOf(false) }
     var isExtensionsSheetOpen by remember { mutableStateOf(false) }
     var isSyncSheetOpen by remember { mutableStateOf(false) }
+    var isDownloadsSheetOpen by remember { mutableStateOf(false) }
     var isGeminiPanelOpen by remember { mutableStateOf(false) }
     var isWorkPanelOpen by remember { mutableStateOf(false) }
     var selectedWorkService by remember { mutableStateOf("keep") } // "keep", "gmail", "calendar"
@@ -233,55 +234,46 @@ fun MainBrowserScreen(viewModel: BrowserViewModel) {
                 .background(MaterialTheme.colorScheme.background)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Wrapper to handle swipe tab switching and vertical reload on AddressBar area
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .swipeToSwitchTabs(
-                            onSwipeLeft = { viewModel.swipeToNextTab() },
-                            onSwipeRight = { viewModel.swipeToPrevTab() },
-                            onSwipeDown = { webViewInstance?.reload() }
-                        )
-                ) {
-                    AddressBar(
-                        searchBarText = searchBarText,
-                        activeTab = activeTab,
-                        viewModel = viewModel,
-                        onFocusChange = { },
-                        onNavigate = { input ->
-                            val targetUrl = resolveUrlOrSearch(input)
-                            viewModel.updateActiveTab { it.url = targetUrl }
-                            viewModel.updateSearchBarText(targetUrl)
-                            focusManager.clearFocus()
-                        },
-                        onSyncClick = { isSyncSheetOpen = true },
-                        onExtensionsClick = { isExtensionsSheetOpen = true },
-                        onBookmarksOpen = { isBookmarksSheetOpen = true },
-                        onReadingModeClick = {
-                            webViewInstance?.evaluateJavascript("""
-                                (function() {
-                                    var title = document.title || "";
-                                    var selectors = ["article p", "main p", ".post-content p", ".article-content p", "p"];
-                                    var paragraphs = [];
-                                    for (var i = 0; i < selectors.length; i++) {
-                                        var found = document.querySelectorAll(selectors[i]);
-                                        if (found && found.length > 2) {
-                                            paragraphs = Array.from(found).map(p => p.innerText.trim()).filter(t => t.length > 15);
-                                            break;
-                                        }
+                AddressBar(
+                    searchBarText = searchBarText,
+                    activeTab = activeTab,
+                    viewModel = viewModel,
+                    onFocusChange = { },
+                    onNavigate = { input ->
+                        val targetUrl = resolveUrlOrSearch(input)
+                        viewModel.updateActiveTab { it.url = targetUrl }
+                        viewModel.updateSearchBarText(targetUrl)
+                        focusManager.clearFocus()
+                    },
+                    onSyncClick = { isSyncSheetOpen = true },
+                    onExtensionsClick = { isExtensionsSheetOpen = true },
+                    onBookmarksOpen = { isBookmarksSheetOpen = true },
+                    onReadingModeClick = {
+                        webViewInstance?.evaluateJavascript("""
+                            (function() {
+                                var title = document.title || "";
+                                var selectors = ["article p", "main p", ".post-content p", ".article-content p", "p"];
+                                var paragraphs = [];
+                                for (var i = 0; i < selectors.length; i++) {
+                                    var found = document.querySelectorAll(selectors[i]);
+                                    if (found && found.length > 2) {
+                                        paragraphs = Array.from(found).map(p => p.innerText.trim()).filter(t => t.length > 15);
+                                        break;
                                     }
-                                    if (paragraphs.length === 0) {
-                                        paragraphs = Array.from(document.querySelectorAll("p")).map(p => p.innerText.trim()).filter(t => t.length > 5);
-                                    }
-                                    if (window.BrowserBridge) {
-                                        window.BrowserBridge.onReaderModeContent(title, JSON.stringify(paragraphs));
-                                    }
-                                })()
-                            """.trimIndent(), null)
-                            viewModel.enterReaderMode()
-                        }
-                    )
-                }
+                                }
+                                if (paragraphs.length === 0) {
+                                    paragraphs = Array.from(document.querySelectorAll("p")).map(p => p.innerText.trim()).filter(t => t.length > 5);
+                                }
+                                if (window.BrowserBridge) {
+                                    window.BrowserBridge.onReaderModeContent(title, JSON.stringify(paragraphs));
+                                }
+                            })()
+                        """.trimIndent(), null)
+                        viewModel.enterReaderMode()
+                    },
+                    onRefreshClick = { webViewInstance?.reload() },
+                    onStopLoadingClick = { webViewInstance?.stopLoading() }
+                )
 
                 // Render Content Workspace (supports side-by-side or stacked multitasking)
                 Row(modifier = Modifier.weight(1f)) {
@@ -389,7 +381,16 @@ fun MainBrowserScreen(viewModel: BrowserViewModel) {
                 MenuAndHistoryModalSheet(
                     viewModel = viewModel,
                     onBookmarksClick = { isBookmarksSheetOpen = true; isHistorySheetOpen = false },
+                    onDownloadsClick = { isDownloadsSheetOpen = true; isHistorySheetOpen = false },
+                    onRefreshClick = { webViewInstance?.reload(); isHistorySheetOpen = false },
                     onDismiss = { isHistorySheetOpen = false }
+                )
+            }
+
+            if (isDownloadsSheetOpen) {
+                DownloadsManagerDialog(
+                    viewModel = viewModel,
+                    onDismiss = { isDownloadsSheetOpen = false }
                 )
             }
 
@@ -441,7 +442,9 @@ fun AddressBar(
     onSyncClick: () -> Unit,
     onExtensionsClick: () -> Unit,
     onBookmarksOpen: () -> Unit,
-    onReadingModeClick: () -> Unit
+    onReadingModeClick: () -> Unit,
+    onRefreshClick: () -> Unit,
+    onStopLoadingClick: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val isBookmarked = activeTab?.let {
@@ -540,6 +543,21 @@ fun AddressBar(
                         trailingIcon = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (activeTab?.url != "about:newtab" && activeTab?.url?.startsWith("http") == true) {
+                                    IconButton(
+                                        onClick = {
+                                            if (activeTab.isLoading) onStopLoadingClick() else onRefreshClick()
+                                        },
+                                        modifier = Modifier.size(28.dp).testTag("refresh_page_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = if (activeTab.isLoading) Icons.Default.Close else Icons.Default.Refresh,
+                                            contentDescription = if (activeTab.isLoading) "Остановить" else "Обновить страницу",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+
                                     IconButton(
                                         onClick = onReadingModeClick,
                                         modifier = Modifier.size(28.dp).testTag("reading_mode_button")
@@ -726,6 +744,11 @@ fun BrowserWebViewContainer(
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
             settings.cacheMode = WebSettings.LOAD_DEFAULT
+
+            // Setup download listener
+            setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
+                viewModel.startDownload(context, url, userAgent, contentDisposition, mimetype, contentLength)
+            }
 
             // Register standard safe Android JS bridges
             addJavascriptInterface(object {
@@ -1009,7 +1032,7 @@ fun HomeDashboard(
                     }
                     if (userEmail == null) {
                         Button(
-                            onClick = { viewModel.loginWithGoogle() },
+                            onClick = { openSync() },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Text("Войти", fontSize = 11.sp)
@@ -1379,6 +1402,19 @@ fun GoogleAccountSyncDialog(
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle(initialValue = emptyList())
     val history by viewModel.history.collectAsStateWithLifecycle(initialValue = emptyList())
 
+    var authStep by remember { mutableStateOf(1) }
+    var emailInput by remember { mutableStateOf("") }
+    var passwordInput by remember { mutableStateOf("") }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+
+    if (authStep == 3) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(1300)
+            authStep = 4
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1391,21 +1427,246 @@ fun GoogleAccountSyncDialog(
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 if (userEmail == null) {
-                    Text(
-                        "Nebula Sync позволяет мгновенно синхронизировать историю поиска, " +
-                        "открытые вкладки и пароли между вашими смартфонами и компьютерами Google Chrome.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { viewModel.loginWithGoogle() },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
+                    // Google Logo Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Done, "Google Cloud")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Привязать Google Аккаунт")
+                        Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
+                        Text("o", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
+                        Text("o", color = Color(0xFFFBBC05), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
+                        Text("g", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
+                        Text("l", color = Color(0xFF34A853), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
+                        Text("e", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
+                    }
+
+                    if (authStep == 1) {
+                        Text(
+                            "Вход",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "Используйте ваш аккаунт Google для входа в синхронизацию Nebula Cloud Sync.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.secondary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = emailInput,
+                            onValueChange = {
+                                emailInput = it
+                                emailError = if (it.isNotEmpty() && !android.util.Patterns.EMAIL_ADDRESS.matcher(it).matches()) {
+                                    "Неверный формат почты"
+                                } else {
+                                    null
+                                }
+                            },
+                            label = { Text("Электронная почта Google") },
+                            isError = emailError != null,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingIcon = { Icon(Icons.Default.Person, null, tint = Color(0xFF4285F4)) }
+                        )
+                        if (emailError != null) {
+                            Text(
+                                text = emailError ?: "",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                if (emailInput.isBlank()) {
+                                    emailError = "Почта не может быть пустой"
+                                } else if (android.util.Patterns.EMAIL_ADDRESS.matcher(emailInput).matches()) {
+                                    authStep = 2
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
+                        ) {
+                            Text("Далее")
+                        }
+                    } else if (authStep == 2) {
+                        // Email Pill with Switch Back Arrow
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .clickable { authStep = 1 }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp), tint = Color(0xFF4285F4))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(emailInput, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(Icons.Default.ArrowBack, "Назад", modifier = Modifier.size(12.dp).rotate(90f))
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            "Добро пожаловать",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "Введите ваш пароль для подтверждения личности.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.secondary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                        )
+
+                        OutlinedTextField(
+                            value = passwordInput,
+                            onValueChange = {
+                                passwordInput = it
+                                passwordError = null
+                            },
+                            label = { Text("Введите пароль") },
+                            singleLine = true,
+                            isError = passwordError != null,
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFF4285F4)) },
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        )
+                        if (passwordError != null) {
+                            Text(
+                                text = passwordError ?: "",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { authStep = 1 },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Назад")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    if (passwordInput.isBlank()) {
+                                        passwordError = "Пароль не может быть пустым"
+                                    } else {
+                                        authStep = 3
+                                    }
+                                },
+                                modifier = Modifier.weight(1.5f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
+                            ) {
+                                Text("Далее")
+                            }
+                        }
+                    } else if (authStep == 3) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                color = Color(0xFF4285F4),
+                                strokeWidth = 4.dp
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Установление защищенного соединения...", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("accounts.google.com API", fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                        }
+                    } else if (authStep == 4) {
+                        Text(
+                            "Nebula запрашивает доступ к аккаунту",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                        Text(
+                            "Приложение Nebula Services запрашивает доступ к вашему аккаунту Google ($emailInput). Это позволит приложению выполнять следующие действия:",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                .padding(12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(bottom = 8.dp)) {
+                                Icon(Icons.Default.Done, null, tint = Color(0xFF34A853), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Данные Nebula Sync", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text("Синхронизация вкладок, закладок и сессий в реальном времени.", fontSize = 10.sp, color = MaterialTheme.colorScheme.secondary)
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.Top) {
+                                Icon(Icons.Default.Done, null, tint = Color(0xFF34A853), modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("История поиска", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text("Мгновенный экспорт поисковых логов на защищенные сервера Google.", fontSize = 10.sp, color = MaterialTheme.colorScheme.secondary)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            "Предоставляя разрешение, вы соглашаетесь с Политикой конфиденциальности и Условиями использования сервисов Nebula.",
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = {
+                                    authStep = 1
+                                    passwordInput = ""
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Отклонить")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.loginWithGoogle(emailInput)
+                                },
+                                modifier = Modifier.weight(1.5f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F9D58))
+                            ) {
+                                Text("Разрешить")
+                            }
+                        }
                     }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -1419,7 +1680,7 @@ fun GoogleAccountSyncDialog(
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
-                            Text("eugeniy.arhipov207@gmail.com", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(userEmail ?: "", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Text("Google Account Link Active", fontSize = 11.sp, color = Color(0xFF0F9D58))
                         }
                     }
@@ -1912,6 +2173,8 @@ fun TabsManagerDialog(
 fun MenuAndHistoryModalSheet(
     viewModel: BrowserViewModel,
     onBookmarksClick: () -> Unit,
+    onDownloadsClick: () -> Unit,
+    onRefreshClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val history by viewModel.history.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -1934,6 +2197,18 @@ fun MenuAndHistoryModalSheet(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.Star, null, tint = Color(0xFFF4B400))
                             Text("Закладки", fontSize = 12.sp)
+                        }
+                    }
+                    TextButton(onClick = onDownloadsClick) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.ArrowForward, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.rotate(90f))
+                            Text("Загрузки", fontSize = 12.sp)
+                        }
+                    }
+                    TextButton(onClick = { onRefreshClick(); onDismiss() }) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Refresh, null, tint = Color(0xFF0F9D58))
+                            Text("Обновить", fontSize = 12.sp)
                         }
                     }
                     TextButton(onClick = { viewModel.createNewTab(); onDismiss() }) {
@@ -2212,9 +2487,153 @@ fun Modifier.swipeToSwitchTabs(
             }
         },
         onDrag = { change, dragAmount ->
-            change.consume()
             totalDragX += dragAmount.x
             totalDragY += dragAmount.y
+            val isGenuineDrag = kotlin.math.abs(totalDragX) > 24f || kotlin.math.abs(totalDragY) > 24f
+            if (isGenuineDrag) {
+                change.consume()
+            }
+        }
+    )
+}
+
+// --- DOWNLOADS MANAGER DIALOG ---
+@Composable
+fun DownloadsManagerDialog(
+    viewModel: BrowserViewModel,
+    onDismiss: () -> Unit
+) {
+    val downloads by viewModel.downloads.collectAsStateWithLifecycle(initialValue = emptyList())
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Загрузки", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                IconButton(onClick = { viewModel.clearAllDownloads() }) {
+                    Icon(Icons.Default.Delete, "Очистить список", tint = Color.Red, modifier = Modifier.size(20.dp))
+                }
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (downloads.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Нет загруженных файлов", fontSize = 14.sp, color = MaterialTheme.colorScheme.secondary)
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                        items(downloads) { download ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowForward,
+                                    contentDescription = null,
+                                    tint = when (download.status) {
+                                        "COMPLETED" -> Color(0xFF34A853)
+                                        "FAILED" -> Color(0xFFEA4335)
+                                        "DOWNLOADING" -> Color(0xFF1A73E8)
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.size(28.dp).rotate(90f)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = download.fileName,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    if (download.status == "DOWNLOADING") {
+                                        LinearProgressIndicator(
+                                            progress = { download.progress / 100f },
+                                            modifier = Modifier.fillMaxWidth().height(4.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text("${download.progress}% • Скачивание...", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                    } else {
+                                        val statusText = when (download.status) {
+                                            "COMPLETED" -> "Завершено"
+                                            "FAILED" -> "Ошибка"
+                                            "PAUSED" -> "Приостановлено"
+                                            else -> "Ожидание"
+                                        }
+                                        val sizeText = if (download.contentLength > 0) {
+                                            val kb = download.contentLength / 1024
+                                            if (kb > 1024) String.format("%.1f MБ", kb / 1024f) else "$kb KБ"
+                                        } else "—"
+                                        Text("$statusText • $sizeText", fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                                    }
+                                }
+                                Row {
+                                    if (download.status == "COMPLETED" && download.filePath != null) {
+                                        IconButton(onClick = {
+                                            try {
+                                                val file = java.io.File(download.filePath)
+                                                if (file.exists()) {
+                                                    val openIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                                                            context,
+                                                            "${context.packageName}.provider",
+                                                            file
+                                                        )
+                                                        setDataAndType(uri, download.mimeType ?: "*/*")
+                                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    }
+                                                    context.startActivity(openIntent)
+                                                } else {
+                                                    val intent = android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                                                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    }
+                                                    context.startActivity(intent)
+                                                }
+                                            } catch (e: Exception) {
+                                                try {
+                                                    val intent = android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                                                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    }
+                                                    context.startActivity(intent)
+                                                } catch (ex: Exception) {
+                                                    android.widget.Toast.makeText(context, "Не удалось открыть файл", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }) {
+                                            Icon(Icons.Default.Done, "Открыть", tint = Color(0xFF34A853), modifier = Modifier.size(20.dp))
+                                        }
+                                    }
+                                    IconButton(onClick = { viewModel.deleteDownload(download) }) {
+                                        Icon(Icons.Default.Delete, "Убрать", modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            }
+                            Divider()
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Закрыть") }
         }
     )
 }

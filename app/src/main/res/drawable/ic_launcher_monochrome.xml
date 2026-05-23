@@ -1,0 +1,41 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+        
+        <!-- Outer ring segments separated by thin transparent lines.
+             Since it's monochrome, we use a single color #000000 for everything.
+             Android handles coloring this dynamically. -->
+             
+        <!-- Main background circle with a cut out for the center disc and badge -->
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M 256,64 A 192,192 0 1,0 256,448 A 192,192 0 1,0 256,64 M 256,160 A 96,96 0 1,1 256,352 A 96,96 0 1,1 256,160" />
+
+        <!-- Clear cutout for the main center circle separating white ring and center blue disc -->
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M 256,180 A 76,76 0 1,0 256,332 A 76,76 0 1,0 256,180" />
+
+        <!-- Badge background circle cutout outer ring -->
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M 390,325 A 65,65 0 1,0 390,455 A 65,65 0 1,0 390,325" />
+
+        <!-- Badge Bold 'N' path centered in the badge using clean cutout visual -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="14"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M 365,422 L 365,358 L 415,422 L 415,358" />
+
+    </group>
+</vector>

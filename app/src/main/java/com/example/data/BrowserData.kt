@@ -119,11 +119,43 @@ interface TabDao {
     suspend fun clearAll()
 }
 
+// --- Downloads Entity ---
+@Entity(tableName = "downloads")
+data class DownloadEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val url: String,
+    val fileName: String,
+    val filePath: String?,
+    val mimeType: String?,
+    val contentLength: Long,
+    val status: String, // "PENDING", "DOWNLOADING", "COMPLETED", "FAILED"
+    val progress: Int = 0,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Dao
+interface DownloadDao {
+    @Query("SELECT * FROM downloads ORDER BY timestamp DESC")
+    fun getAllDownloads(): Flow<List<DownloadEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDownload(download: DownloadEntity): Long
+
+    @Update
+    suspend fun updateDownload(download: DownloadEntity)
+
+    @Delete
+    suspend fun deleteDownload(download: DownloadEntity)
+
+    @Query("DELETE FROM downloads")
+    suspend fun clearAll()
+}
+
 // --- Database Configuration ---
 
 @Database(
-    entities = [BookmarkEntity::class, HistoryEntity::class, ExtensionEntity::class, TabEntity::class],
-    version = 3,
+    entities = [BookmarkEntity::class, HistoryEntity::class, ExtensionEntity::class, TabEntity::class, DownloadEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class BrowserDatabase : RoomDatabase() {
@@ -131,4 +163,5 @@ abstract class BrowserDatabase : RoomDatabase() {
     abstract fun historyDao(): HistoryDao
     abstract fun extensionDao(): ExtensionDao
     abstract fun tabDao(): TabDao
+    abstract fun downloadDao(): DownloadDao
 }

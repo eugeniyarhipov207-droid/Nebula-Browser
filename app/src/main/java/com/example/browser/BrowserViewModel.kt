@@ -65,6 +65,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     val bookmarks = repository.bookmarks
     val history = repository.history
     val extensions = repository.extensions
+    val downloads = repository.downloads
 
     // --- Adblock Count ---
     private val _adsBlockedTotal = MutableStateFlow(0)
@@ -88,6 +89,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     val geminiThinking: StateFlow<Boolean> = _geminiThinking.asStateFlow()
 
     init {
+        val prefs = application.getSharedPreferences("nebula_prefs", android.content.Context.MODE_PRIVATE)
+        _userEmail.value = prefs.getString("user_email", null)
+
         viewModelScope.launch {
             // Pre-seed Extensions inside Room
             repository.initializeBuiltInExtensions()
@@ -309,15 +313,19 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // --- Google Sync Core ---
-    fun loginWithGoogle() {
-        // Link default Google profile seamlessly
-        _userEmail.value = "eugeniy.arhipov207@gmail.com"
+    fun loginWithGoogle(email: String) {
+        // Link custom Google profile
+        _userEmail.value = email
+        val prefs = getApplication<Application>().getSharedPreferences("nebula_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("user_email", email).apply()
         syncCloudData()
     }
 
     fun logoutGoogle() {
         _userEmail.value = null
         _lastSync.value = null
+        val prefs = getApplication<Application>().getSharedPreferences("nebula_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().remove("user_email").apply()
     }
 
     fun syncCloudData() {
@@ -571,6 +579,154 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (currentIndex >= 0) {
             val prevIndex = if (currentIndex - 1 >= 0) currentIndex - 1 else currentList.size - 1
             selectTab(currentList[prevIndex].id)
+        }
+    }
+
+    // --- Downloads Helpers ---
+    fun startDownload(
+        context: android.content.Context,
+        url: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimetype: String?,
+        contentLength: Long
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype)
+            val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val filePath = if (downloadDir != null) "${downloadDir.absolutePath}/$fileName" else null
+
+            try {
+                // Prepare request for standard Android DownloadManager
+                val uri = android.net.Uri.parse(url)
+                val request = android.app.DownloadManager.Request(uri).apply {
+                    if (userAgent != null) {
+                        addRequestHeader("User-Agent", userAgent)
+                    }
+                    val cookie = android.webkit.CookieManager.getInstance().getCookie(url)
+                    if (cookie != null) {
+                        addRequestHeader("Cookie", cookie)
+                    }
+                    setDescription("Downloading: $fileName")
+                    setTitle(fileName)
+                    setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, fileName)
+                }
+
+                val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                val downloadId = downloadManager.enqueue(request)
+
+                // Save in local Room Database
+                val downloadRecordId = repository.insertDownload(
+                    DownloadEntity(
+                        url = url,
+                        fileName = fileName,
+                        filePath = filePath,
+                        mimeType = mimetype,
+                        contentLength = contentLength,
+                        status = "DOWNLOADING",
+                        progress = 0
+                    )
+                )
+
+                // Launch progress monitoring loop for this specific download
+                monitorDownloadProgress(context, downloadId, downloadRecordId)
+
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Началась загрузка: $fileName", android.widget.Toast.LENGTH_SHORT).show()
+                }
+
+            } catch (e: Exception) {
+                Log.e("BrowserViewModel", "Download failed: ${e.message}", e)
+                repository.insertDownload(
+                    DownloadEntity(
+                        url = url,
+                        fileName = fileName,
+                        filePath = filePath,
+                        mimeType = mimetype,
+                        contentLength = contentLength,
+                        status = "FAILED",
+                        progress = 0
+                    )
+                )
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Ошибка скачивания: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun monitorDownloadProgress(
+        context: android.content.Context,
+        downloadManagerId: Long,
+        dbRecordId: Long
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+            var isDownloading = true
+
+            while (isDownloading) {
+                val query = android.app.DownloadManager.Query().setFilterById(downloadManagerId)
+                val cursor = downloadManager.query(query)
+
+                if (cursor != null && cursor.moveToFirst()) {
+                    val bytesDownloadedIndex = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                    val bytesTotalIndex = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                    val statusIndex = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_STATUS)
+
+                    val bytesDownloaded = if (bytesDownloadedIndex != -1) cursor.getInt(bytesDownloadedIndex) else 0
+                    val bytesTotal = if (bytesTotalIndex != -1) cursor.getInt(bytesTotalIndex) else 0
+                    val statusValue = if (statusIndex != -1) cursor.getInt(statusIndex) else 0
+
+                    val calculatedProgress = if (bytesTotal > 0) {
+                        ((bytesDownloaded.toLong() * 100) / bytesTotal).toInt()
+                    } else {
+                        0
+                    }
+
+                    val (dbStatus, keepLooping) = when (statusValue) {
+                        android.app.DownloadManager.STATUS_SUCCESSFUL -> Pair("COMPLETED", false)
+                        android.app.DownloadManager.STATUS_FAILED -> Pair("FAILED", false)
+                        android.app.DownloadManager.STATUS_PAUSED -> Pair("PAUSED", true)
+                        android.app.DownloadManager.STATUS_PENDING -> Pair("PENDING", true)
+                        else -> Pair("DOWNLOADING", true)
+                    }
+
+                    // Update local db
+                    val currentDownloads = repository.downloads.first()
+                    val match = currentDownloads.find { it.id == dbRecordId.toInt() }
+                    if (match != null) {
+                        repository.updateDownload(
+                            match.copy(
+                                status = dbStatus,
+                                progress = if (dbStatus == "COMPLETED") 100 else calculatedProgress
+                            )
+                        )
+                    }
+
+                    isDownloading = keepLooping
+                    cursor.close()
+                } else {
+                    cursor?.close()
+                    isDownloading = false
+                }
+
+                if (isDownloading) {
+                    kotlinx.coroutines.delay(1500)
+                }
+            }
+        }
+    }
+
+    fun deleteDownload(download: DownloadEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteDownload(download)
+        }
+    }
+
+    fun clearAllDownloads() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.clearDownloads()
         }
     }
 }
