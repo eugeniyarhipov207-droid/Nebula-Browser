@@ -1,0 +1,6 @@
+{
+  "name": "Nebula Browser",
+  "description": "A secure, gesture-powered Material 3 browser with Chrome Extension scripts, Ad Blocker, a Gemini AI copilot, and Google workspace integrations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

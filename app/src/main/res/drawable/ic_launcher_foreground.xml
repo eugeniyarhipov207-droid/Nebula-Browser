@@ -1,0 +1,57 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.8"
+        android:scaleY="0.8">
+        
+        <!-- Yellow Base Circle of Chrome -->
+        <path
+            android:fillColor="#FBC02D"
+            android:pathData="M 256,64 A 192,192 0 1,0 256,448 A 192,192 0 1,0 256,64" />
+
+        <!-- Green Segment of Chrome -->
+        <path
+            android:fillColor="#34A853"
+            android:pathData="M 94,153 A 192,192 0 0,0 256,448 L 338,306 Z" />
+
+        <!-- Red Segment of Chrome -->
+        <path
+            android:fillColor="#EA4335"
+            android:pathData="M 89.72,160 A 192,192 0 0,1 422.28,160 L 256,160 L 174,306 Z" />
+
+        <!-- Center White Ring (outer radius 96) -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M 256,160 A 96,96 0 1,0 256,352 A 96,96 0 1,0 256,160" />
+
+        <!-- Center Blue Circle (radius 76) -->
+        <path
+            android:fillColor="#1A73E8"
+            android:pathData="M 256,180 A 76,76 0 1,0 256,332 A 76,76 0 1,0 256,180" />
+
+        <!-- Badge White border (radius 75) to separate the badge from Chrome body -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M 390,315 A 75,75 0 1,0 390,465 A 75,75 0 1,0 390,315" />
+
+        <!-- Badge Blue background (radius 65) matching Google branding -->
+        <path
+            android:fillColor="#1A73E8"
+            android:pathData="M 390,325 A 65,65 0 1,0 390,455 A 65,65 0 1,0 390,325" />
+
+        <!-- Badge Bold 'N' path centered in the badge -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="14"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M 365,422 L 365,358 L 415,422 L 415,358" />
+
+    </group>
+</vector>
