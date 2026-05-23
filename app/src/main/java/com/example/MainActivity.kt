@@ -1409,273 +1409,504 @@ fun GoogleAccountSyncDialog(
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle(initialValue = emptyList())
     val history by viewModel.history.collectAsStateWithLifecycle(initialValue = emptyList())
 
+    // 1: Choose Account, 2: Manual Email, 3: Manual Password, 4: Consent, 5: Connecting safely (Loader)
     var authStep by remember { mutableStateOf(1) }
+    var selectedEmail by remember { mutableStateOf("eugeniy.arhipov207@gmail.com") }
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
 
-    if (authStep == 3) {
+    if (authStep == 5) {
         LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(1300)
-            authStep = 4
+            kotlinx.coroutines.delay(1600)
+            viewModel.loginWithGoogle(selectedEmail)
         }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Refresh, null, tint = Color(0xFF4285F4))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Облачная учетная запись Google", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-        },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth(0.95f)
+            .padding(vertical = 16.dp),
+        title = null, // Custom headers inside the body to match authentic screens
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
                 if (userEmail == null) {
-                    // Google Logo Header
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
-                        Text("o", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
-                        Text("o", color = Color(0xFFFBBC05), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
-                        Text("g", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
-                        Text("l", color = Color(0xFF34A853), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
-                        Text("e", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-1).sp)
-                    }
-
-                    if (authStep == 1) {
-                        Text(
-                            "Вход",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            "Используйте ваш аккаунт Google для входа в синхронизацию Nebula Cloud Sync.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.secondary,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                        )
-
-                        OutlinedTextField(
-                            value = emailInput,
-                            onValueChange = {
-                                emailInput = it
-                                emailError = if (it.isNotEmpty() && !android.util.Patterns.EMAIL_ADDRESS.matcher(it).matches()) {
-                                    "Неверный формат почты"
-                                } else {
-                                    null
-                                }
-                            },
-                            label = { Text("Электронная почта Google") },
-                            isError = emailError != null,
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = { Icon(Icons.Default.Person, null, tint = Color(0xFF4285F4)) }
-                        )
-                        if (emailError != null) {
-                            Text(
-                                text = emailError ?: "",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(start = 8.dp, top = 4.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Button(
-                            onClick = {
-                                if (emailInput.isBlank()) {
-                                    emailError = "Почта не может быть пустой"
-                                } else if (android.util.Patterns.EMAIL_ADDRESS.matcher(emailInput).matches()) {
-                                    authStep = 2
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
-                        ) {
-                            Text("Далее")
-                        }
-                    } else if (authStep == 2) {
-                        // Email Pill with Switch Back Arrow
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                .clickable { authStep = 1 }
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp), tint = Color(0xFF4285F4))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(emailInput, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Icon(Icons.Default.ArrowBack, "Назад", modifier = Modifier.size(12.dp).rotate(90f))
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            "Добро пожаловать",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            "Введите ваш пароль для подтверждения личности.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.secondary,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                        )
-
-                        OutlinedTextField(
-                            value = passwordInput,
-                            onValueChange = {
-                                passwordInput = it
-                                passwordError = null
-                            },
-                            label = { Text("Введите пароль") },
-                            singleLine = true,
-                            isError = passwordError != null,
-                            modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFF4285F4)) },
-                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                        )
-                        if (passwordError != null) {
-                            Text(
-                                text = passwordError ?: "",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(start = 8.dp, top = 4.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { authStep = 1 },
-                                modifier = Modifier.weight(1f)
+                    when (authStep) {
+                        1 -> {
+                            // SCREEN 1: CHOOSE AN ACCOUNT
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Назад")
+                                Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("o", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("o", color = Color(0xFFFBBC05), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("g", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("l", color = Color(0xFF34A853), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("e", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Sign in with Google", fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Medium)
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    if (passwordInput.isBlank()) {
-                                        passwordError = "Пароль не может быть пустым"
-                                    } else {
-                                        authStep = 3
+
+                            // App Badge
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF1E1E1F))
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "NEBULA SYNC",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 2.sp
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            Text(
+                                text = "Choose an account",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = "to continue to Nebula Sync",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+                            )
+
+                            // Account 1: eugeniy.arhipov207@gmail.com (v0ldex)
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedEmail = "eugeniy.arhipov207@gmail.com"
+                                        authStep = 4 // Direct to Consent
+                                    },
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                                color = MaterialTheme.colorScheme.surface
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF4285F4)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("V", color = Color.White, fontWeight = FontWeight.Bold)
                                     }
-                                },
-                                modifier = Modifier.weight(1.5f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
-                            ) {
-                                Text("Далее")
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = "v0ldex", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(text = "eugeniy.arhipov207@gmail.com", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
                             }
-                        }
-                    } else if (authStep == 3) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(48.dp),
-                                color = Color(0xFF4285F4),
-                                strokeWidth = 4.dp
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Account 2: Use another account
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        authStep = 2 // Manual input
+                                    },
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                                color = MaterialTheme.colorScheme.surface
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(text = "Use another account", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Text(
+                                text = "Before using this app, you can review Nebula Sync's Privacy Policy and Terms of Service.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("Установление защищенного соединения...", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            Text("accounts.google.com API", fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
-                        }
-                    } else if (authStep == 4) {
-                        Text(
-                            "Nebula запрашивает доступ к аккаунту",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                        Text(
-                            "Приложение Nebula Services запрашивает доступ к вашему аккаунту Google ($emailInput). Это позволит приложению выполнять следующие действия:",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                                .padding(12.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(bottom = 8.dp)) {
-                                Icon(Icons.Default.Done, null, tint = Color(0xFF34A853), modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text("Данные Nebula Sync", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                    Text("Синхронизация вкладок, закладок и сессий в реальном времени.", fontSize = 10.sp, color = MaterialTheme.colorScheme.secondary)
-                                }
-                            }
-                            Row(verticalAlignment = Alignment.Top) {
-                                Icon(Icons.Default.Done, null, tint = Color(0xFF34A853), modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text("История поиска", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                    Text("Мгновенный экспорт поисковых логов на защищенные сервера Google.", fontSize = 10.sp, color = MaterialTheme.colorScheme.secondary)
-                                }
-                            }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            "Предоставляя разрешение, вы соглашаетесь с Политикой конфиденциальности и Условиями использования сервисов Nebula.",
-                            fontSize = 9.sp,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = {
-                                    authStep = 1
-                                    passwordInput = ""
-                                },
-                                modifier = Modifier.weight(1f)
+                        2 -> {
+                            // SCREEN 2: MANUAL EMAIL INPUT
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Отклонить")
+                                Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("o", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("o", color = Color(0xFFFBBC05), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("g", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("l", color = Color(0xFF34A853), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("e", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 20.sp)
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    viewModel.loginWithGoogle(emailInput)
+
+                            Text("Sign in", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text("to continue to Nebula Sync", fontSize = 14.sp, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(bottom = 16.dp))
+
+                            OutlinedTextField(
+                                value = emailInput,
+                                onValueChange = {
+                                    emailInput = it
+                                    emailError = if (it.isNotEmpty() && !android.util.Patterns.EMAIL_ADDRESS.matcher(it).matches()) {
+                                        "Неверный формат почты"
+                                    } else null
                                 },
-                                modifier = Modifier.weight(1.5f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F9D58))
+                                label = { Text("Email or phone") },
+                                isError = emailError != null,
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            if (emailError != null) {
+                                Text(emailError ?: "", color = MaterialTheme.colorScheme.error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                            }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
                             ) {
-                                Text("Разрешить")
+                                TextButton(onClick = { authStep = 1 }) {
+                                    Text("Back")
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        if (emailInput.isBlank()) {
+                                            emailError = "Введите адрес электронной почты"
+                                        } else if (android.util.Patterns.EMAIL_ADDRESS.matcher(emailInput).matches()) {
+                                            selectedEmail = emailInput
+                                            authStep = 3
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
+                                ) {
+                                    Text("Next")
+                                }
+                            }
+                        }
+
+                        3 -> {
+                            // SCREEN 3: MANUAL PASSWORD INPUT
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("o", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("o", color = Color(0xFFFBBC05), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("g", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("l", color = Color(0xFF34A853), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                Text("e", color = Color(0xFFEA4335), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            }
+
+                            Surface(
+                                onClick = { authStep = 2 },
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Person, null, modifier = Modifier.size(14.dp), tint = Color(0xFF4285F4))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(selectedEmail, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(Icons.Default.ArrowBack, null, modifier = Modifier.size(10.dp).rotate(90f))
+                                }
+                            }
+
+                            Text("Welcome", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text("Enter your password to verify your identity", fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(bottom = 16.dp))
+
+                            OutlinedTextField(
+                                value = passwordInput,
+                                onValueChange = {
+                                    passwordInput = it
+                                    passwordError = null
+                                },
+                                label = { Text("Enter your password") },
+                                singleLine = true,
+                                isError = passwordError != null,
+                                modifier = Modifier.fillMaxWidth(),
+                                leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color(0xFF4285F4)) },
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                            )
+                            if (passwordError != null) {
+                                Text(passwordError ?: "", color = MaterialTheme.colorScheme.error, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                            }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(onClick = { authStep = 2 }) {
+                                    Text("Back")
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        if (passwordInput.isBlank()) {
+                                            passwordError = "Введите пароль"
+                                        } else {
+                                            authStep = 4
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
+                                ) {
+                                    Text("Next")
+                                }
+                            }
+                        }
+
+                        4 -> {
+                            // SCREEN 4: OAUTH 2.0 CONSENT PAGE (Replicating Image 2)
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF1E1E1F))
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "NEBULA SYNC",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 2.sp
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(18.dp))
+
+                            Text(
+                                text = "Sign in to Nebula Sync",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Custom Dropdown Pill style mimicking "Choose an account" selector
+                            Surface(
+                                modifier = Modifier.clickable { authStep = 1 },
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF4285F4)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("V", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = selectedEmail,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("▼", fontSize = 8.sp, color = MaterialTheme.colorScheme.secondary)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Text(
+                                text = "Google will allow Nebula Sync to access this info about you",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                            )
+
+                            // Permissions Columns
+                            Row(
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text("v0ldex", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("Name and profile picture", fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.padding(bottom = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(selectedEmail, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("Email address", fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "Review Nebula Sync's Privacy Policy and Terms of Service to understand how Nebula Sync will process and protect your data.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = "To make changes at any time, go to your Google Account.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = "Learn more about Sign in with Google.",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF4285F4),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(28.dp))
+
+                            // Two Pill buttons on bottom matching screenshots
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = { authStep = 1 },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(22.dp)
+                                ) {
+                                    Text("Cancel", fontSize = 14.sp)
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Button(
+                                    onClick = { authStep = 5 },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(22.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
+                                ) {
+                                    Text("Continue", fontSize = 14.sp)
+                                }
+                            }
+                        }
+
+                        5 -> {
+                            // SCREEN 5: SECURE CONNECTION LOADER
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(48.dp),
+                                    color = Color(0xFF4285F4),
+                                    strokeWidth = 4.dp
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("Настройка защищенного соединения...", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text("Nebula Sync Cloud & accounts.google.com API", fontSize = 10.sp, color = MaterialTheme.colorScheme.secondary)
                             }
                         }
                     }
                 } else {
+                    // LINKED / CONNECTED STATE
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Box(
                             modifier = Modifier
@@ -1685,17 +1916,18 @@ fun GoogleAccountSyncDialog(
                         ) {
                             Icon(Icons.Default.Person, null, tint = Color(0xFF4285F4))
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text(userEmail ?: "", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("Google Account Link Active", fontSize = 11.sp, color = Color(0xFF0F9D58))
+                            Text(userEmail ?: "", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Google Cloud Sync: ACTIVE", fontSize = 11.sp, color = Color(0xFF0F9D58), fontWeight = FontWeight.SemiBold)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     OutlinedButton(
                         onClick = {
-                            viewModel.createNewTab("https://accounts.google.com/sessions/nebula-sync")
+                            viewModel.createNewTab("https://accounts.google.com")
                             onDismiss()
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -1704,7 +1936,7 @@ fun GoogleAccountSyncDialog(
                     ) {
                         Icon(Icons.Default.Settings, null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Управление на accounts.google.com", fontSize = 11.sp)
+                        Text("Управление на accounts.google.com", fontSize = 12.sp)
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1727,7 +1959,7 @@ fun GoogleAccountSyncDialog(
                             .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("История瀏覽ния", fontSize = 12.sp)
+                        Text("История браузера", fontSize = 12.sp)
                         Text("${history.size} записей", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
 
@@ -1735,18 +1967,18 @@ fun GoogleAccountSyncDialog(
 
                     if (syncing) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Выполняется синхронизация данных...", fontSize = 11.sp)
+                            Text("Синхронизация данных...", fontSize = 11.sp)
                         }
                     } else {
                         Text(
-                            text = if (lastSync != null) "Последняя синхронизация с облаком: ${formatTime(lastSync!!)}"
-                            else "Облачный бэкап еще не проводился",
+                            text = if (lastSync != null) "Последний кэш бэкапа: ${formatTime(lastSync!!)}"
+                            else "Автоматическая синхронизация активна",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.secondary,
                             textAlign = TextAlign.Center,
